@@ -32,39 +32,11 @@
 #include "kernel/scheduler/scheduler.h"
 #include <algorithm>
 
+namespace miosix {
 extern void (* const __Vectors[])();
-
-/**
- * \internal
- * software interrupt routine.
- * Since inside naked functions only assembler code is allowed, this function
- * only calls the ctxsave/ctxrestore macros (which are in assembler), and calls
- * the implementation code in ISR_yield()
- */
-void SVC_Handler() __attribute__((naked));
-void SVC_Handler()
-{
-    saveContext();
-    //Call ISR_yield(). Name is a C++ mangled name.
-    asm volatile("bl _ZN14miosix_private9ISR_yieldEv");
-    restoreContext();
 }
 
 namespace miosix_private {
-
-/**
- * \internal
- * Called by the software interrupt, yield to next thread
- * Declared noinline to avoid the compiler trying to inline it into the caller,
- * which would violate the requirement on naked functions. Function is not
- * static because otherwise the compiler optimizes it out...
- */
-void ISR_yield() __attribute__((noinline));
-void ISR_yield()
-{
-    miosix::Thread::IRQstackOverflowCheck();
-    miosix::Scheduler::IRQfindNextThread();
-}
 
 void IRQsystemReboot()
 {
@@ -95,7 +67,7 @@ void IRQportableStartKernel()
     //NOTE: the SAM-BA bootloader does not relocate the vector table offset,
     //so any interrupt would call the SAM-BA IRQ handler, not the application
     //ones.
-    SCB->VTOR = reinterpret_cast<unsigned int>(&__Vectors);
+    SCB->VTOR = reinterpret_cast<unsigned int>(&miosix::__Vectors);
     
     //Enable fault handlers
     SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk | SCB_SHCSR_BUSFAULTENA_Msk
@@ -117,6 +89,19 @@ void IRQportableStartKernel()
     __enable_irq();
     miosix::Thread::yield();
     //Never reaches here
+}
+
+void IRQstackOverflowCheck()
+{
+    const unsigned int watermarkSize=miosix::WATERMARK_LEN/sizeof(unsigned int);
+    for(unsigned int i=0;i<watermarkSize;i++)
+    {
+        if(miosix::cur->watermark[i]!=miosix::WATERMARK_FILL)
+            miosix::errorHandler(miosix::STACK_OVERFLOW);
+    }
+    if(miosix::cur->ctxsave[0] < reinterpret_cast<unsigned int>(
+            miosix::cur->watermark+watermarkSize))
+        miosix::errorHandler(miosix::STACK_OVERFLOW);
 }
 
 void sleepCpu()

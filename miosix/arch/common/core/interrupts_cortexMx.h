@@ -1,5 +1,5 @@
 /***************************************************************************
- *   Copyright (C) 2010, 2011, 2012, 2013, 2014 by Terraneo Federico       *
+ *   Copyright (C) 2010-2023 by Terraneo Federico                          *
  *                                                                         *
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
@@ -25,14 +25,64 @@
  *   along with this program; if not, see <http://www.gnu.org/licenses/>   *
  ***************************************************************************/
 
-#ifndef INTERRUPTS_H
-#define	INTERRUPTS_H
+#pragma once
 
-/**
- * Called when an unexpected interrupt occurs.
- * It is called by stage_1_boot.cpp for all weak interrupts not defined.
+#include "interfaces/arch_registers.h"
+
+/*
+ * This pointer is used by the kernel, and should not be used by end users.
+ * this is a pointer to a location where to store the thread's registers during
+ * context switch. It requires C linkage to be used inside asm statement.
+ * Registers are saved in the following order:
+ * *ctxsave+32 --> r11
+ * *ctxsave+28 --> r10
+ * *ctxsave+24 --> r9
+ * *ctxsave+20 --> r8
+ * *ctxsave+16 --> r7
+ * *ctxsave+12 --> r6
+ * *ctxsave+8  --> r5
+ * *ctxsave+4  --> r4
+ * *ctxsave+0  --> psp
  */
-void unexpectedInterrupt();
+extern "C" {
+extern volatile unsigned int *ctxsave;
+}
+
+inline void doYield()
+{
+    SCB->ICSR=SCB_ICSR_PENDSVSET_Msk;
+    //NVIC_SetPendingIRQ(PendSV_IRQn);
+//     asm volatile("movs r3, #0\n\t"
+//                  "svc  0"
+//                  :::"r3");
+}
+
+inline void doDisableInterrupts()
+{
+    // Documentation says __disable_irq() disables all interrupts with
+    // configurable priority, so also SysTick and SVC.
+    // No need to disable faults with __disable_fault_irq()
+    __disable_irq();
+    //The new fastDisableInterrupts/fastEnableInterrupts are inline, so there's
+    //the need for a memory barrier to avoid aggressive reordering
+    asm volatile("":::"memory");
+}
+
+inline void doEnableInterrupts()
+{
+    __enable_irq();
+    //The new fastDisableInterrupts/fastEnableInterrupts are inline, so there's
+    //the need for a memory barrier to avoid aggressive reordering
+    asm volatile("":::"memory");
+}
+
+inline bool checkAreInterruptsEnabled()
+{
+    register int i;
+    asm volatile("mrs   %0, primask    \n\t":"=r"(i));
+    if(i!=0) return false;
+    return true;
+}
 
 /**
  * Possible kind of faults that the Cortex-M3 can report.
@@ -55,4 +105,3 @@ enum FaultType
     BF_NOADDR=13   //Busfault (missing addr)
 };
 
-#endif	//INTERRUPTS_H
