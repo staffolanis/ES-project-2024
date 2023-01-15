@@ -461,7 +461,7 @@ void ISR_yield() __attribute__((noinline));
 void ISR_yield()
 {
     miosix_private::IRQstackOverflowCheck();
-    miosix::Scheduler::IRQfindNextThread();
+    miosix::Scheduler::IRQrunScheduler();
 }
 
 

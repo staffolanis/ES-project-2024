@@ -126,7 +126,7 @@ static void IRQsetNextPreemption()
     internal::IRQosTimerSetInterrupt(nextPreemption);
 }
 
-void EDFScheduler::IRQfindNextThread()
+void EDFScheduler::IRQrunScheduler()
 {
     if(kernelRunning!=0) return;//If kernel is paused, do nothing
     #ifdef WITH_CPU_TIME_COUNTER

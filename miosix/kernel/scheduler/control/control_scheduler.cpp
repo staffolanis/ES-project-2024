@@ -167,7 +167,7 @@ void ControlScheduler::IRQsetIdleThread(Thread *idleThread)
     idleThread->schedData.priority=-1;
     idle=idleThread;
     //Initializing curInRound to end() so that the first time
-    //IRQfindNextThread() is called the scheduling algorithm runs
+    //IRQrunScheduler() is called the scheduling algorithm runs
     if(threadListSize!=1) errorHandler(UNEXPECTED);
     curInRound=nullptr;
 }
@@ -182,7 +182,7 @@ long long ControlScheduler::IRQgetNextPreemption()
     return nextPreemption;
 }
 
-void ControlScheduler::IRQfindNextThread()
+void ControlScheduler::IRQrunScheduler()
 {
     if(kernelRunning!=0) return;//If kernel is paused, do nothing
     #ifdef WITH_CPU_TIME_COUNTER
@@ -580,7 +580,7 @@ void ControlScheduler::IRQsetIdleThread(Thread *idleThread)
     idleThread->schedData.priority=-1;
     idle=idleThread;
     //Initializing curInRound to end() so that the first time
-    //IRQfindNextThread() is called the scheduling algorithm runs
+    //IRQrunScheduler() is called the scheduling algorithm runs
     if(threadListSize!=1) errorHandler(UNEXPECTED);
     curInRound=activeThreads.end();
 }
@@ -595,7 +595,7 @@ long long ControlScheduler::IRQgetNextPreemption()
     return nextPreemption;
 }
 
-void ControlScheduler::IRQfindNextThread()
+void ControlScheduler::IRQrunScheduler()
 {
     if(kernelRunning!=0) return;//If kernel is paused, do nothing
     #ifdef WITH_CPU_TIME_COUNTER

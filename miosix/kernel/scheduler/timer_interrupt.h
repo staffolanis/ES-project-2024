@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "interfaces/interrupts.h"
 #include "interfaces/portability.h"
 #include "scheduler.h"
 
@@ -49,7 +50,7 @@ inline void IRQtimerInterrupt(long long currentTime)
     if(currentTime >= Scheduler::IRQgetNextPreemption() || hptw)
     {
         //End of the burst || a higher priority thread has woken up
-        Scheduler::IRQfindNextThread();//If the kernel is running, preempt
+        IRQinvokeScheduler(); //If the kernel is running, preempt
         if(kernelRunning!=0) pendingWakeup=true;
     }
 }
