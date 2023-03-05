@@ -448,6 +448,7 @@ void SVC_Handler()
                  );                                                           \
 }
 
+void PendSV_Handler() __attribute__((naked));
 void PendSV_Handler()
 {
     saveContext();
