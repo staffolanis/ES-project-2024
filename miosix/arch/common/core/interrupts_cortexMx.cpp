@@ -38,10 +38,16 @@
 
 namespace miosix {
 
-static void unexpectedInterrupt(void*);
-
 // Same code behavior but different code size TODO document or remove
 // #define VARIANT
+
+static void unexpectedInterrupt(void*)
+{
+    #ifdef WITH_ERRLOG
+    IRQerrorLog("\r\n***Unexpected Peripheral interrupt\r\n");
+    #endif //WITH_ERRLOG
+    miosix_private::IRQsystemReboot();
+}
 
 const unsigned int numInterrupts=MIOSIX_NUM_PERIPHERAL_IRQ;
 #ifdef VARIANT
@@ -371,8 +377,7 @@ void SVC_Handler()
     // syscall.
     if(SCB->SHCSR & (1<<13))
     {
-        if(miosix::Thread::IRQreportFault(miosix_private::FaultData(
-            MP,0,0)))
+        if(miosix::Thread::IRQreportFault(miosix_private::FaultData(MP,0,0)))
         {
             SCB->SHCSR &= ~(1<<13); //Clear MEMFAULTPENDED bit
             return;
@@ -537,14 +542,6 @@ void Reset_Handler()
                  "isb                          \n\t":::"r0");
 
     program_startup();
-}
-
-static void unexpectedInterrupt(void*)
-{
-    #ifdef WITH_ERRLOG
-    IRQerrorLog("\r\n***Unexpected Peripheral interrupt\r\n");
-    #endif //WITH_ERRLOG
-    miosix_private::IRQsystemReboot();
 }
 
 //Stack top, defined in the linker script
