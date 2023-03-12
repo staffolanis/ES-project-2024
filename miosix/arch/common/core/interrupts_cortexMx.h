@@ -51,6 +51,7 @@ extern volatile unsigned int *ctxsave;
 inline void doYield()
 {
     SCB->ICSR=SCB_ICSR_PENDSVSET_Msk;
+    asm volatile("dmb":::"memory");
     //NVIC_SetPendingIRQ(PendSV_IRQn);
 //     asm volatile("movs r3, #0\n\t"
 //                  "svc  0"
