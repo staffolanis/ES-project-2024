@@ -32,10 +32,6 @@
 #include "kernel/scheduler/scheduler.h"
 #include <algorithm>
 
-namespace miosix {
-extern void (* const __Vectors[])();
-}
-
 namespace miosix_private {
 
 void IRQsystemReboot()
@@ -64,11 +60,6 @@ void initCtxsave(unsigned int *ctxsave, void *(*pc)(void *), unsigned int *sp,
 
 void IRQportableStartKernel()
 {
-    //NOTE: the SAM-BA bootloader does not relocate the vector table offset,
-    //so any interrupt would call the SAM-BA IRQ handler, not the application
-    //ones.
-    SCB->VTOR = reinterpret_cast<unsigned int>(&miosix::__Vectors);
-    
     //Enable fault handlers
     SCB->SHCSR |= SCB_SHCSR_USGFAULTENA_Msk | SCB_SHCSR_BUSFAULTENA_Msk
             | SCB_SHCSR_MEMFAULTENA_Msk;
