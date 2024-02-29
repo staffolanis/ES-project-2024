@@ -18,3 +18,5 @@ miosix/_tools/filesystems/build
 # Exclude Mac OS X temporary
 ._*
 .DS_Store
+
+.idea/*
