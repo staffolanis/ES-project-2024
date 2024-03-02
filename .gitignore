@@ -20,3 +20,6 @@ miosix/_tools/filesystems/build
 .DS_Store
 
 .idea/*
+.vscode/*
+
+notes.md
