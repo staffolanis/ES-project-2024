@@ -115,9 +115,10 @@
 /************************* PLL Parameters *************************************/
 /* PLL_VCO = (HSE_VALUE or HSI_VALUE / PLL_M) * PLL_N */
 
-#define PLL_M (HSE_VALUE/1000000)
+//mod #define PLL_M (HSE_VALUE/1000000)
 
 /* SYSCLK = PLL_VCO / PLL_P */
+/*
 #ifdef SYSCLK_FREQ_180MHz
 #define PLL_N      360
 #define PLL_P      2
@@ -141,6 +142,52 @@
 #define PLL_P      4
 #define PLL_Q      7
 #else
+#error Clock not selected
+#endif
+//mod*/
+#define USB_FREQ 48000000
+
+typedef struct {
+    int N;
+    int M;
+    int P;
+    int Q;
+
+    int errorF;
+    int errorFUSB;
+} Parameters;
+
+void setParameters(int InF, int OutFTarget, Parameters *params) { 
+    float UsbCheck = (float)USB_FREQ; 
+    float InF_ = (float)(InF); 
+    float OutFTarget_ = (float)(OutFTarget); 
+    float usb_check = UsbCheck; 
+    
+    for (int n = 50; n < 433; n++) { 
+        for (int m = 2; m < 64; m++) { 
+            float vco = InF_ * n / m; 
+            for (int q = 2; q < 16; q++) { 
+                for (int p = 2; p < 10; p += 2) { 
+                    float out_f = vco / p; 
+                    float out_usb = vco / q; 
+                    float diff_usb = (float)USB_FREQ - out_usb; 
+                    
+                    if ((out_f == OutFTarget_) && (diff_usb <= usb_check && diff_usb >= 0.0)) { 
+                        usb_check = diff_usb; 
+                        params->N = n; 
+                        params->M = m; 
+                        params->P = p; 
+                        params->Q = q; 
+                        params->errorFUSB = (int)((diff_usb/(float)USB_FREQ)*10000); 
+                    } 
+                } 
+            } 
+        } 
+    } 
+}
+
+
+#ifndef SYSCLK_FREQ
 #error Clock not selected
 #endif
 
@@ -171,6 +218,8 @@
                variable is updated automatically.
   */
 //By TFT: we increase the clock BEFORE initializing .data and .bss!
+
+/*
 #ifdef SYSCLK_FREQ_180MHz
 uint32_t SystemCoreClock = 180000000;
 #elif defined(SYSCLK_FREQ_168MHz)
@@ -182,6 +231,13 @@ uint32_t SystemCoreClock = 84000000;
 #else
 #error No clock defined
 #endif
+*/
+#ifdef SYSCLK_FREQ
+uint32_t SystemCoreClock = (uint32_t)SYSCLK_FREQ;
+#else
+#error no clock selected
+#endif
+
 const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
 
 /**
@@ -394,6 +450,13 @@ static void SetSysClock(void)
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
     /* Configure the main PLL */
+    Parameters params;
+    setParameters(SYSCLK_FREQ, HSE_VALUE, &params);
+    #define PLL_M params.M
+    #define PLL_N params.N
+    #define PLL_Q params.Q
+    #define PLL_P params.P
+
     RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
                    (RCC_PLLCFGR_PLLSRC_HSE) | (PLL_Q << 24);
 
