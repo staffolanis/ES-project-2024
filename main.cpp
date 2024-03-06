@@ -1,8 +1,6 @@
 #include <miosix.h>
 #include <cstdio>
 
-#define USB_FREQ 48000000
-
 using namespace std;
 using namespace miosix;
 

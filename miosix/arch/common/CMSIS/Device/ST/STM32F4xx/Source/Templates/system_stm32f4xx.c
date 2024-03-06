@@ -110,44 +110,15 @@
 /******************************************************************************/
 
 // By TFT -- begin
-// this was backported from an older version. Now this code seems to be
-// moved in a function called HAL_something...
 /************************* PLL Parameters *************************************/
 /* PLL_VCO = (HSE_VALUE or HSI_VALUE / PLL_M) * PLL_N */
 
 //mod #define PLL_M (HSE_VALUE/1000000)
 
 /* SYSCLK = PLL_VCO / PLL_P */
-/*
-#ifdef SYSCLK_FREQ_180MHz
-#define PLL_N      360
-#define PLL_P      2
-// Warning: this output will be 45MHz due to PLL limitations instead of 48MHz.
-// This means that the SDIO and RNG will run approximatively 6% slower and
-// that the USB peripheral WILL NOT WORK as it requires a precise 48MHz
-#define PLL_Q      8
-#elif defined(SYSCLK_FREQ_168MHz)
-#define PLL_N      336
-#define PLL_P      2
-#define PLL_Q      7
-#elif defined(SYSCLK_FREQ_100MHz)
-#define PLL_N      200
-#define PLL_P      2
-// Warning: this output will be 40MHz due to PLL limitations instead of 48MHz.
-// This means that the SDIO and RNG will run approximatively 17% slower and
-// that the USB peripheral WILL NOT WORK as it requires a precise 48MHz
-#define PLL_Q      5
-#elif defined(SYSCLK_FREQ_84MHz)
-#define PLL_N      336
-#define PLL_P      4
-#define PLL_Q      7
-#else
-#error Clock not selected
-#endif
-//mod*/
+
+
 #define USB_FREQ 48000000
-#define HSE_VALUE 8000000
-#define SYSCLK_FREQ 168000000
 
 void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *param_q, int *param_p) {
     float UsbCheck = (float)USB_FREQ;
@@ -179,7 +150,7 @@ void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *par
 }
 
 #ifndef SYSCLK_FREQ
-#error Clock not selected
+    #error Clock not selected
 #endif
 
 /******************************************************************************/
@@ -209,20 +180,6 @@ void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *par
                variable is updated automatically.
   */
 //By TFT: we increase the clock BEFORE initializing .data and .bss!
-
-/*
-#ifdef SYSCLK_FREQ_180MHz
-uint32_t SystemCoreClock = 180000000;
-#elif defined(SYSCLK_FREQ_168MHz)
-uint32_t SystemCoreClock = 168000000;
-#elif defined(SYSCLK_FREQ_100MHz)
-uint32_t SystemCoreClock = 100000000;
-#elif defined(SYSCLK_FREQ_84MHz)
-uint32_t SystemCoreClock = 84000000;
-#else
-#error No clock defined
-#endif
-*/
 #ifdef SYSCLK_FREQ
 uint32_t SystemCoreClock = (uint32_t)SYSCLK_FREQ;
 #else
