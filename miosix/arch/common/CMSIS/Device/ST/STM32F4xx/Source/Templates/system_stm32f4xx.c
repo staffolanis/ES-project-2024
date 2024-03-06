@@ -117,10 +117,32 @@
 
 /* SYSCLK = PLL_VCO / PLL_P */
 
+//HSE range 4MHz - 26 MHz
+#ifdef HSE_VALUE
+    #define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSE
+    #define HS_FREQ HSE_VALUE
+    #if HSE_VALUE < 4000000 || HSE_VALUE > 26000000
+        #error "frequency not supported by external oscillator"
+    #endif
+#else
+    #define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSI
+    #define HS_FREQ HSI_VALUE
+#endif
+
+//SYSCLK_FREQ <= 180000000
+#ifdef SYSCLK_FREQ
+    #if SYSCLK_FREQ > 180000000
+        #error "Max Frequency supported = 180MHz"
+    #endif
+#else
+    #error "Clock not selected"
+#endif
 
 #define USB_FREQ 48000000
 
 void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *param_q, int *param_p) {
+
+    //
     float UsbCheck = (float)USB_FREQ;
     float InF_ = (float)(InF);
     float OutFTarget_ = (float)(OutFTarget);
@@ -148,10 +170,6 @@ void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *par
         }
     }
 }
-
-#ifndef SYSCLK_FREQ
-    #error Clock not selected
-#endif
 
 /******************************************************************************/
 // By TFT -- end
@@ -181,9 +199,9 @@ void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *par
   */
 //By TFT: we increase the clock BEFORE initializing .data and .bss!
 #ifdef SYSCLK_FREQ
-uint32_t SystemCoreClock = (uint32_t)SYSCLK_FREQ;
+    uint32_t SystemCoreClock = (uint32_t)SYSCLK_FREQ;
 #else
-#error no clock selected
+    #error "no clock selected"
 #endif
 
 const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
@@ -400,7 +418,7 @@ static void SetSysClock(void)
     /* Configure the main PLL */
 
     int param_m, param_n, param_q, param_p;
-    setParameters(HSE_VALUE, SYSCLK_FREQ, &param_m, &param_n, &param_q, &param_p);
+    setParameters(HS_FREQ, SYSCLK_FREQ, &param_m, &param_n, &param_q, &param_p);
 
     #define PLL_M param_m
     #define PLL_N param_n
@@ -408,7 +426,7 @@ static void SetSysClock(void)
     #define PLL_P param_p
 
     RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
-                   (RCC_PLLCFGR_PLLSRC_HSE) | (PLL_Q << 24);
+                   (RCC_PLLSRC) | (PLL_Q << 24);
 
     /* Enable the main PLL */
     RCC->CR |= RCC_CR_PLLON;
