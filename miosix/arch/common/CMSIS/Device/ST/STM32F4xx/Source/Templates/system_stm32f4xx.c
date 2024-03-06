@@ -146,46 +146,37 @@
 #endif
 //mod*/
 #define USB_FREQ 48000000
+#define HSE_VALUE 8000000
+#define SYSCLK_FREQ 168000000
 
-typedef struct {
-    int N;
-    int M;
-    int P;
-    int Q;
+void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *param_q, int *param_p) {
+    float UsbCheck = (float)USB_FREQ;
+    float InF_ = (float)(InF);
+    float OutFTarget_ = (float)(OutFTarget);
+    float usb_check = UsbCheck;
 
-    int errorF;
-    int errorFUSB;
-} Parameters;
+    for (int n = 50; n < 433; n++) {
+        for (int m = 2; m < 64; m++) {
+            float vco = InF_ * n / m;
+            for (int q = 2; q < 16; q++) {
+                for (int p = 2; p < 10; p += 2) {
+                    float out_f = vco / p;
+                    float out_usb = vco / q;
+                    float diff_usb = (float)USB_FREQ - out_usb;
 
-void setParameters(int InF, int OutFTarget, Parameters *params) { 
-    float UsbCheck = (float)USB_FREQ; 
-    float InF_ = (float)(InF); 
-    float OutFTarget_ = (float)(OutFTarget); 
-    float usb_check = UsbCheck; 
-    
-    for (int n = 50; n < 433; n++) { 
-        for (int m = 2; m < 64; m++) { 
-            float vco = InF_ * n / m; 
-            for (int q = 2; q < 16; q++) { 
-                for (int p = 2; p < 10; p += 2) { 
-                    float out_f = vco / p; 
-                    float out_usb = vco / q; 
-                    float diff_usb = (float)USB_FREQ - out_usb; 
-                    
-                    if ((out_f == OutFTarget_) && (diff_usb <= usb_check && diff_usb >= 0.0)) { 
-                        usb_check = diff_usb; 
-                        params->N = n; 
-                        params->M = m; 
-                        params->P = p; 
-                        params->Q = q; 
-                        params->errorFUSB = (int)((diff_usb/(float)USB_FREQ)*10000); 
-                    } 
-                } 
-            } 
-        } 
-    } 
+                    if ((out_f == OutFTarget_) && (diff_usb <= usb_check && diff_usb >= 0.0)) {
+                        usb_check = diff_usb;
+                        *param_m = m;
+                        *param_n = n;
+                        *param_q = q;
+                        *param_p = p;
+                        //params->errorFUSB = (int)((diff_usb/(float)USB_FREQ)*10000);
+                    }
+                }
+            }
+        }
+    }
 }
-
 
 #ifndef SYSCLK_FREQ
 #error Clock not selected
@@ -450,12 +441,14 @@ static void SetSysClock(void)
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
     /* Configure the main PLL */
-    Parameters params;
-    setParameters(SYSCLK_FREQ, HSE_VALUE, &params);
-    #define PLL_M params.M
-    #define PLL_N params.N
-    #define PLL_Q params.Q
-    #define PLL_P params.P
+
+    int param_m, param_n, param_q, param_p;
+    setParameters(HSE_VALUE, SYSCLK_FREQ, &param_m, &param_n, &param_q, &param_p);
+
+    #define PLL_M param_m
+    #define PLL_N param_n
+    #define PLL_Q param_q
+    #define PLL_P param_p
 
     RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
                    (RCC_PLLCFGR_PLLSRC_HSE) | (PLL_Q << 24);
