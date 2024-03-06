@@ -23,3 +23,5 @@ miosix/_tools/filesystems/build
 .vscode/*
 
 notes.md
+
+launch.sh
