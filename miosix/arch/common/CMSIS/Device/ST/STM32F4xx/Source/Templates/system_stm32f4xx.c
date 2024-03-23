@@ -117,7 +117,7 @@
 
 /* SYSCLK = PLL_VCO / PLL_P */
 
-//HSE range 4MHz - 26 MHz
+//HSE range 4-26 MHz
 #ifdef HSE_VALUE
     #define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSE
     #define HS_FREQ HSE_VALUE
@@ -140,35 +140,95 @@
 
 #define USB_FREQ 48000000
 
-void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *param_q, int *param_p) {
+void setParameters(int FIN, int FOUT, int* param_m, int* param_n, int* param_q, int* param_p) {
+  /* ---- declarations ----*/
+    float p_choices[4][2];
+    float n_choices[300][3];
+    int full_conf[4] = {0};
 
-    //
-    float UsbCheck = (float)USB_FREQ;
-    float InF_ = (float)(InF);
-    float OutFTarget_ = (float)(OutFTarget);
-    float usb_check = UsbCheck;
+    float ratio;
+    float ratio_usb;
 
-    for (int n = 50; n < 433; n++) {
-        for (int m = 2; m < 64; m++) {
-            float vco = InF_ * n / m;
-            for (int q = 2; q < 16; q++) {
-                for (int p = 2; p < 10; p += 2) {
-                    float out_f = vco / p;
-                    float out_usb = vco / q;
-                    float diff_usb = (float)USB_FREQ - out_usb;
+    /* ---- initializations ----*/
+    int i,j,p,m,q;
+    for (i=0; i<4; i++){
+        for(j=0; j<2; j++){
+            p_choices[i][j] = 0;
+        }        
+    }
 
-                    if ((out_f == OutFTarget_) && (diff_usb <= usb_check && diff_usb >= 0.0)) {
-                        usb_check = diff_usb;
-                        *param_m = m;
-                        *param_n = n;
-                        *param_q = q;
-                        *param_p = p;
-                        //params->errorFUSB = (int)((diff_usb/(float)USB_FREQ)*10000);
+    for (i=0; i<16; i++){
+        n_choices[i][0] = 0;
+        n_choices[i][1] = 0;
+        n_choices[i][2] = 0;
+    }
+
+    ratio = (float)FOUT/(float)FIN;
+    ratio_usb = (float)USB_FREQ/(float)FIN;
+
+    /* ---- let's find these parameters ----
+    // p can be 2,4,6,8 
+    // p_choices(p,ratio*p)*/
+    for (p=1; p<=4; p++){
+        p_choices[p-1][0] = 2*p;
+        p_choices[p-1][1] = ratio*2*p;
+    }
+
+    int n_idx = 0;
+    float nn;
+    for (m=2; m<=63; m++) {
+            for (p=0; p<4; p++){
+                nn = m*p_choices[p][1];
+                if (nn >= 2 && nn <= 432 && nn-(int)nn == 0){
+                    n_choices[n_idx][0] = nn;
+                    n_choices[n_idx][1] = m;
+                    n_choices[n_idx][2] = p_choices[p][0];
+                    n_idx++;
+                }
+            }
+    }
+    if (n_idx){
+    float qq;
+        int idx_conf = 0;
+        int flag = 0;
+        float a;
+        for (i=0; i<n_idx && !flag; i++){
+            a = n_choices[i][0]/n_choices[i][1];
+            qq = a/ratio_usb;
+            
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0){
+                full_conf[0] = (int)n_choices[i][0];
+                full_conf[1] = (int)n_choices[i][1];
+                full_conf[2] = (int)n_choices[i][2];
+                full_conf[3] = (int)qq;
+                idx_conf++;
+                flag = 1;
+            }
+        }
+
+        if (idx_conf == 0){
+            float min_diff = (float)USB_FREQ;
+            float out_usb, diff;
+
+            for (i=0; i<n_idx; i++){
+                for (q=2; q<=15; q++){
+                    out_usb = (((float)FIN*n_choices[i][0]) / (n_choices[i][1]*q));
+                    diff = (float)USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff){
+                        min_diff = diff;
+                        full_conf[0] = (int)n_choices[i][0];
+                        full_conf[1] = (int)n_choices[i][1];
+                        full_conf[2] = (int)n_choices[i][2];
+                        full_conf[3] = (int)q;
                     }
                 }
             }
         }
-    }
+    } 
+    *param_n = full_conf[0];
+    *param_m = full_conf[1];
+    *param_p = full_conf[2];
+    *param_q = full_conf[3];
 }
 
 /******************************************************************************/
@@ -214,7 +274,7 @@ const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 
   * @{
   */
 
-static void SetSysClock(void);
+static void SetSysClock(void); 
 #if defined (DATA_IN_ExtSRAM) || defined (DATA_IN_ExtSDRAM)
   static void SystemInit_ExtMemCtl(void); 
 #endif /* DATA_IN_ExtSRAM || DATA_IN_ExtSDRAM */
@@ -424,7 +484,7 @@ static void SetSysClock(void)
     #define PLL_N param_n
     #define PLL_Q param_q
     #define PLL_P param_p
-
+    
     RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
                    (RCC_PLLSRC) | (PLL_Q << 24);
 
