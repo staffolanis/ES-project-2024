@@ -31,10 +31,12 @@ namespace miosix {
 
 void delayMs(unsigned int mseconds)
 {
-    #ifdef SYSCLK_FREQ_216MHz
-    register const unsigned int count=71800;
+
+    #ifdef SYSCLK_FREQ
+        register const unsigned int count= (int)(SYSCLK_FREQ/4000);
     #else
-    #warning "Delays are uncalibrated for this clock frequency"    
+        register const unsigned int count=71800;
+        #warning "Delays are uncalibrated for this clock frequency"
     #endif
     
     for(unsigned int i=0;i<mseconds;i++)
@@ -53,7 +55,7 @@ void delayUs(unsigned int useconds)
 {
     // This delay has been calibrated to take x microseconds
     // It is written in assembler to be independent on compiler optimization
-    #ifdef SYSCLK_FREQ_216MHz
+    #ifdef SYSCLK_FREQ
     asm volatile("           mov   r1, #72    \n"
                  "           mul   r2, %0, r1 \n"
                  "           mov   r1, #0     \n"
