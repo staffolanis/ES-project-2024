@@ -13,8 +13,8 @@ int main() {
     greenLED::mode(Mode::OUTPUT);
     while(true){
         greenLED::high();
-        Thread::sleep(500);
+        Thread::sleep(10000);
         greenLED::low();
-        Thread::sleep(500);
+        Thread::sleep(10000);
     }
 }

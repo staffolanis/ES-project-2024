@@ -4,6 +4,78 @@
 #include "kernel/stage_2_boot.h"
 #include <string.h>
 
+#ifdef HSE_VALUE
+    #define HS_FREQ HSE_VALUE
+#else
+    #define HS_FREQ HSI_VALUE
+#endif
+
+#define USB_FREQ 48000000
+
+struct Parameters {
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q ;
+};
+
+constexpr Parameters calculateParameters(int fin, int fout) {
+    float ratio = (float)fout/(float)fin;
+    float ratio_usb = (float)USB_FREQ/(float)fin;
+    float p_choices[4][2] = {};
+    float n_choices[300][3] = {};
+    int full_conf[4] = {0};
+    int n_idx = 0;
+    int flag = 0;
+    for(int p = 1; p<=4;p++){
+        p_choices[p-1][0]=2*p; 
+        p_choices[p-1][1]=ratio*2*p;
+    }
+    for (int m=2; m<=63; m++) {
+        for (int p=0; p<4; p++){
+            int nn = m*p_choices[p][1];
+            if (nn >= 2 && nn <= 432 && nn-(int)nn == 0){
+                n_choices[n_idx][0] = nn;
+                n_choices[n_idx][1] = m;
+                n_choices[n_idx][2] = p_choices[p][0];
+                n_idx++;
+            }
+        }
+    }
+    if (n_idx != 0){
+        for (int i=0; i<n_idx && !flag; i++){
+            float a = n_choices[i][0]/n_choices[i][1];
+            int qq = a/ratio_usb;
+
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0){
+                full_conf[0] = (int)n_choices[i][0];
+                full_conf[1] = (int)n_choices[i][1];
+                full_conf[2] = (int)n_choices[i][2];
+                full_conf[3] = (int)qq;
+                flag = 1;
+            }
+        }
+        if (flag == 0){
+            float min_diff = (float)USB_FREQ;
+            for (int i=0; i<n_idx; i++){
+                for (int q=2; q<=15; q++){
+                    float out_usb = (((float)fin*n_choices[i][0]) / (n_choices[i][1]*q));
+                    float diff = (float)USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff){
+                        min_diff = diff;
+                        full_conf[0] = (int)n_choices[i][0];
+                        full_conf[1] = (int)n_choices[i][1];
+                        full_conf[2] = (int)n_choices[i][2];
+                        full_conf[3] = (int)q;
+                    }
+                }
+            }
+        }
+    }
+    
+    return {full_conf[0], full_conf[1], full_conf[2], full_conf[3]};
+}
+
 /*
  * startup.cpp
  * STM32 C++ startup.
@@ -33,7 +105,10 @@ void program_startup()
     //enables xram, before touching .data and .bss
     //Third, this is a performance improvement since the loops that initialize
     //.data and zeros .bss now run with the CPU at full speed instead of 8MHz
-    SystemInit();
+
+	constexpr Parameters param = calculateParameters(HS_FREQ, SYSCLK_FREQ);
+
+    SystemInit(param.param_n, param.param_m, param.param_p, param.param_q);
 
     //These are defined in the linker script
     extern unsigned char _etext asm("_etext");

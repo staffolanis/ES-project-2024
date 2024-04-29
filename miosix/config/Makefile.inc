@@ -187,8 +187,6 @@ ifeq ($(OPT_BOARD),stm32f407vg_stm32f4discovery)
     #CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ_100MHz=100000000
     #CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ_84MHz=84000000
 
-    PROGRAM_CMDLINE := st-flash --reset write "main.bin" 0x8000000
-
 endif
 
 ##---------------------------------------------------------------------------

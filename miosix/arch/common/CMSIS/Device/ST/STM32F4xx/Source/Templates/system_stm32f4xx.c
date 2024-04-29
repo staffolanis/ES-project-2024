@@ -138,99 +138,6 @@
     #error "Clock not selected"
 #endif
 
-#define USB_FREQ 48000000
-
-void setParameters(int FIN, int FOUT, int* param_m, int* param_n, int* param_q, int* param_p) {
-  /* ---- declarations ----*/
-    float p_choices[4][2];
-    float n_choices[300][3];
-    int full_conf[4] = {0};
-
-    float ratio;
-    float ratio_usb;
-
-    /* ---- initializations ----*/
-    int i,j,p,m,q;
-    for (i=0; i<4; i++){
-        for(j=0; j<2; j++){
-            p_choices[i][j] = 0;
-        }        
-    }
-
-    for (i=0; i<16; i++){
-        n_choices[i][0] = 0;
-        n_choices[i][1] = 0;
-        n_choices[i][2] = 0;
-    }
-
-    ratio = (float)FOUT/(float)FIN;
-    ratio_usb = (float)USB_FREQ/(float)FIN;
-
-    /* ---- let's find these parameters ----
-    // p can be 2,4,6,8 
-    // p_choices(p,ratio*p)*/
-    for (p=1; p<=4; p++){
-        p_choices[p-1][0] = 2*p;
-        p_choices[p-1][1] = ratio*2*p;
-    }
-
-    int n_idx = 0;
-    float nn;
-    for (m=2; m<=63; m++) {
-            for (p=0; p<4; p++){
-                nn = m*p_choices[p][1];
-                if (nn >= 2 && nn <= 432 && nn-(int)nn == 0){
-                    n_choices[n_idx][0] = nn;
-                    n_choices[n_idx][1] = m;
-                    n_choices[n_idx][2] = p_choices[p][0];
-                    n_idx++;
-                }
-            }
-    }
-    if (n_idx){
-    float qq;
-        int idx_conf = 0;
-        int flag = 0;
-        float a;
-        for (i=0; i<n_idx && !flag; i++){
-            a = n_choices[i][0]/n_choices[i][1];
-            qq = a/ratio_usb;
-            
-            if (qq>=2 && qq<=15 && qq-(int)qq == 0){
-                full_conf[0] = (int)n_choices[i][0];
-                full_conf[1] = (int)n_choices[i][1];
-                full_conf[2] = (int)n_choices[i][2];
-                full_conf[3] = (int)qq;
-                idx_conf++;
-                flag = 1;
-            }
-        }
-
-        if (idx_conf == 0){
-            float min_diff = (float)USB_FREQ;
-            float out_usb, diff;
-
-            for (i=0; i<n_idx; i++){
-                for (q=2; q<=15; q++){
-                    out_usb = (((float)FIN*n_choices[i][0]) / (n_choices[i][1]*q));
-                    diff = (float)USB_FREQ - out_usb;
-                    if (diff >= 0 && diff<=min_diff){
-                        min_diff = diff;
-                        full_conf[0] = (int)n_choices[i][0];
-                        full_conf[1] = (int)n_choices[i][1];
-                        full_conf[2] = (int)n_choices[i][2];
-                        full_conf[3] = (int)q;
-                    }
-                }
-            }
-        }
-    } 
-    *param_n = full_conf[0];
-    *param_m = full_conf[1];
-    *param_p = full_conf[2];
-    *param_q = full_conf[3];
-}
-
 /******************************************************************************/
 // By TFT -- end
 
@@ -274,7 +181,7 @@ const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 
   * @{
   */
 
-static void SetSysClock(void); 
+static void SetSysClock(int param_n, int param_m, int param_p, int param_q);
 #if defined (DATA_IN_ExtSRAM) || defined (DATA_IN_ExtSDRAM)
   static void SystemInit_ExtMemCtl(void); 
 #endif /* DATA_IN_ExtSRAM || DATA_IN_ExtSDRAM */
@@ -294,7 +201,7 @@ static void SetSysClock(void);
   * @param  None
   * @retval None
   */
-void SystemInit(void)
+void SystemInit(int param_n, int param_m, int param_p, int param_q)
 {
   /* FPU settings ------------------------------------------------------------*/
   #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
@@ -328,7 +235,7 @@ void SystemInit(void)
 
   /* Configure the System clock source, PLL Multiplier and Divider factors, 
      AHB/APBx prescalers and Flash settings ----------------------------------*/
-  SetSysClock();
+  SetSysClock(param_n, param_m, param_p, param_q);
   
   /* Configure the Vector Table location add offset address ------------------*/
 #ifdef VECT_TAB_SRAM
@@ -433,7 +340,7 @@ void SystemCoreClockUpdate(void)
   * @param  None
   * @retval None
   */
-static void SetSysClock(void)
+static void SetSysClock(int param_n, int param_m, int param_p, int param_q)
 {
 /******************************************************************************/
 /*            PLL (clocked by HSE) used as System clock source                */
@@ -476,17 +383,9 @@ static void SetSysClock(void)
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
     /* Configure the main PLL */
-
-    int param_m, param_n, param_q, param_p;
-    setParameters(HS_FREQ, SYSCLK_FREQ, &param_m, &param_n, &param_q, &param_p);
-
-    #define PLL_M param_m
-    #define PLL_N param_n
-    #define PLL_Q param_q
-    #define PLL_P param_p
     
-    RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
-                   (RCC_PLLSRC) | (PLL_Q << 24);
+    RCC->PLLCFGR = param_m | (param_n << 6) | (((param_p >> 1) -1) << 16) |
+                   (RCC_PLLSRC) | (param_q << 24);
 
     /* Enable the main PLL */
     RCC->CR |= RCC_CR_PLLON;
