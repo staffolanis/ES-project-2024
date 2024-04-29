@@ -4,6 +4,12 @@
 #include "kernel/stage_2_boot.h"
 #include <string.h>
 
+#ifdef HSE_VALUE
+    #define HS_FREQ HSE_VALUE
+#else
+    #define HS_FREQ HSI_VALUE
+#endif
+
 #define USB_FREQ 48000000
 
 struct Parameters {
@@ -165,7 +171,7 @@ void Reset_Handler()
 	 * at _heap_end can be unavailable until the external RAM is initialized.
 	 */
 
-	constexpr Parameters param = calculateParameters(8000000, 120000000);
+	constexpr Parameters param = calculateParameters(HS_FREQ, SYSCLK_FREQ);
 
     SystemInit(param.param_n, param.param_m, param.param_p, param.param_q);
 
