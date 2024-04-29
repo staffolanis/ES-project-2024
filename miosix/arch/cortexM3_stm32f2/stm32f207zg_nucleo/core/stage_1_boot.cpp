@@ -6,7 +6,14 @@
 
 #define USB_FREQ 48000000
 
-constexpr int calculate_m(int fin, int fout) {
+struct Parameters {
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q ;
+};
+
+constexpr Parameters calculateParameters(int fin, int fout) {
     float ratio = (float)fout/(float)fin;
     float ratio_usb = (float)USB_FREQ/(float)fin;
     float p_choices[4][2] = {};
@@ -60,98 +67,7 @@ constexpr int calculate_m(int fin, int fout) {
         }
     }
     
-    return full_conf[1];
-}
-
-constexpr int calculate_p(int fin, int fout, int value_m) {
-    float ratio = (float)fout/(float)fin;
-    float ratio_usb = (float)USB_FREQ/(float)fin;
-    float p_choices[4][2] = {};
-    float n_choices[4][3] = {};
-    int full_conf[4] = {0};
-    int n_idx = 0;
-    int flag = 0;
-    for(int p = 1; p<=4;p++){
-        p_choices[p-1][0]=2*p; 
-        p_choices[p-1][1]=ratio*2*p;
-    }
-    for (int p=0; p<4; p++){
-        int nn = value_m*p_choices[p][1];
-        if (nn >= 2 && nn <= 432 && nn-(int)nn == 0){
-            n_choices[n_idx][0] = nn;
-            n_choices[n_idx][1] = value_m;
-            n_choices[n_idx][2] = p_choices[p][0];
-            n_idx++;
-        }
-    }
-    if (n_idx != 0){
-        for (int i=0; i<n_idx && !flag; i++){
-            float a = n_choices[i][0]/n_choices[i][1];
-            int qq = a/ratio_usb;
-
-            if (qq>=2 && qq<=15 && qq-(int)qq == 0){
-                full_conf[0] = (int)n_choices[i][0];
-                full_conf[1] = (int)n_choices[i][1];
-                full_conf[2] = (int)n_choices[i][2];
-                full_conf[3] = (int)qq;
-                flag = 1;
-            }
-        }
-        if (flag == 0){
-            float min_diff = (float)USB_FREQ;
-            for (int i=0; i<n_idx; i++){
-                for (int q=2; q<=15; q++){
-                    float out_usb = (((float)fin*n_choices[i][0]) / (n_choices[i][1]*q));
-                    float diff = (float)USB_FREQ - out_usb;
-                    if (diff >= 0 && diff<=min_diff){
-                        min_diff = diff;
-                        full_conf[0] = (int)n_choices[i][0];
-                        full_conf[1] = (int)n_choices[i][1];
-                        full_conf[2] = (int)n_choices[i][2];
-                        full_conf[3] = (int)q;
-                    }
-                }
-            }
-        }
-    }
-    
-    return full_conf[2];
-}
-
-constexpr int calculate_n(int fin, int fout, int value_m, int value_p) {
-    float ratio = (float)fout/(float)fin;
-    int nn = value_m*value_p*ratio;
-    if (nn >= 2 && nn <= 432 && nn-(int)nn == 0){
-        return nn;
-    }
-    return 0;
-}
-
-constexpr int calculate_q(int fin, int fout, int value_m, int value_p, int value_n) {
-    float ratio_usb = (float)USB_FREQ/(float)fin;
-    if (value_n != 0){
-
-        float a = value_n/value_m;
-        int qq = a/ratio_usb;
-
-        if (qq>=2 && qq<=15 && qq-(int)qq == 0){
-            return qq;
-        }
-        else {
-            float min_diff = (float)USB_FREQ;
-            int best_q = 2;
-            for (int q=2; q<=15; q++){
-                float out_usb = (((float)fin*value_n) / (value_m*q));
-                float diff = (float)USB_FREQ - out_usb;
-                if (diff >= 0 && diff<=min_diff){
-                    min_diff = diff;
-                    best_q = (int)q;
-                }
-            }
-            return best_q;
-        }
-    }
-    return 0;
+    return {full_conf[0], full_conf[1], full_conf[2], full_conf[3]};
 }
 
 /*
@@ -249,12 +165,9 @@ void Reset_Handler()
 	 * at _heap_end can be unavailable until the external RAM is initialized.
 	 */
 
-	constexpr int result_m = calculate_m(8000000, 120000000);
-    constexpr int result_p = calculate_p(8000000, 120000000, result_m);
-    constexpr int result_n = calculate_n(8000000, 120000000, result_m, result_p);
-    constexpr int result_q = calculate_q(8000000, 120000000, result_m, result_p, result_n);
+	constexpr Parameters param = calculateParameters(8000000, 120000000);
 
-    SystemInit(result_n, result_m, result_p, result_q);
+    SystemInit(param.param_n, param.param_m, param.param_p, param.param_q);
 
     /*
      * Initialize process stack and switch to it.
