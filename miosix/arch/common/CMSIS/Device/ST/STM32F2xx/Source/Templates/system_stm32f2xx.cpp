@@ -70,6 +70,103 @@
 #define HS_FREQ HSI_VALUE
 #endif
 
+#define USB_FREQ 48000000
+
+struct Parameters 
+{
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q;
+    int state;
+};
+
+template<int FIN, int FOUT> constexpr Parameters calculateParameters() 
+{
+    float p_choices[4][2] = {};
+    float ratio = (float)FOUT/(float)FIN;
+    float ratio_usb = USB_FREQ/(float)FIN;
+
+    float n_choices[300][3] = {};
+    int full_conf[300][4] = {};
+
+    /* ---- let's find these parameters ----
+    // p can be 2,4,6,8 
+    // p_choices(p,ratio*p)*/
+    for (int p=0; p<4; p++)
+    {
+        p_choices[p][0] = 2*(p+1);
+        p_choices[p][1] = ratio*2*(p+1);
+    }
+    int n_idx = 0;
+    for (int m=2; m<=63; m++) 
+    {
+            for (int p=0; p<4; p++)
+            {
+                float nn = m*p_choices[p][1];
+                float vco = FIN * (nn/m);
+                if (nn >= 192 && nn <= 432 && nn-(int)nn == 0 && vco >= 192e6 && vco <= 432e6)
+                { 
+                    n_choices[n_idx][0] = nn;
+                    n_choices[n_idx][1] = m;
+                    n_choices[n_idx][2] = p_choices[p][0];
+                    n_idx++;
+                }
+            }
+    }
+    
+    if(n_idx == 0)
+    {
+        return {0,0,0,0,1};
+    }
+    else
+    {
+        int idx_conf = 0;
+        int state = 0;
+        for (int i=0; i<n_idx && idx_conf == 0; i++)
+        {
+            float qq = (n_choices[i][0]/n_choices[i][1])/ratio_usb;        
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0)
+            {
+                full_conf[idx_conf][0] = (int)n_choices[i][0];
+                full_conf[idx_conf][1] = (int)n_choices[i][1];
+                full_conf[idx_conf][2] = (int)n_choices[i][2];
+                full_conf[idx_conf][3] = (int)qq;
+                idx_conf++;
+            }
+        }
+
+        if (idx_conf == 0)
+        {
+            state = 2;
+
+            float min_diff = USB_FREQ;
+            for (int i=0; i<n_idx; i++)
+            {
+                for (int q=2; q<=15; q++)
+                {
+                    float out_usb = ((FIN*n_choices[i][0]) / (n_choices[i][1]*q));
+                    float diff = USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff)
+                    {
+                        min_diff = diff;
+                        full_conf[idx_conf][0] = (int)n_choices[i][0];
+                        full_conf[idx_conf][1] = (int)n_choices[i][1];
+                        full_conf[idx_conf][2] = (int)n_choices[i][2];
+                        full_conf[idx_conf][3] = (int)q;
+                        idx_conf++;
+                    }
+                }
+            }
+        }
+
+        idx_conf --;
+
+        return {full_conf[idx_conf][0], full_conf[idx_conf][1], full_conf[idx_conf][2], full_conf[idx_conf][3], state};
+    }
+}
+
+
 /**
   * @}
   */
@@ -175,7 +272,7 @@
   * @{
   */
 
-static void SetSysClock(int param_n, int param_m, int param_p, int param_q);
+static void SetSysClock(void);
 #ifdef DATA_IN_ExtSRAM
   static void SystemInit_ExtMemCtl(void); 
 #endif /* DATA_IN_ExtSRAM */
@@ -195,7 +292,7 @@ static void SetSysClock(int param_n, int param_m, int param_p, int param_q);
   * @param  None
   * @retval None
   */
-void SystemInit(int param_n, int param_m, int param_p, int param_q)
+void SystemInit(void)
 {
 #ifdef DATA_IN_ExtSRAM
   SystemInit_ExtMemCtl(); 
@@ -203,7 +300,7 @@ void SystemInit(int param_n, int param_m, int param_p, int param_q)
 
   /* Configure the System clock source, PLL Multiplier and Divider factors, 
      AHB/APBx prescalers and Flash settings ----------------------------------*/
-  SetSysClock(param_n, param_m, param_p, param_q);
+  SetSysClock();
 
   /* Configure the Vector Table location -------------------------------------*/
 #if defined(USER_VECT_TAB_ADDRESS)
@@ -306,7 +403,7 @@ void SystemCoreClockUpdate(void)
   * @param  None
   * @retval None
   */
-static void SetSysClock(int param_n, int param_m, int param_p, int param_q)
+static void SetSysClock(void)
 {
 /******************************************************************************/
 /*            PLL (clocked by HSE) used as System clock source                */
@@ -354,8 +451,13 @@ static void SetSysClock(int param_n, int param_m, int param_p, int param_q)
     /* PCLK1 = HCLK / 4*/
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
-    RCC->PLLCFGR = param_m | (param_n << 6) | (((param_p >> 1) -1) << 16) |
-                   (RCC_PLLSRC) | (param_q << 24);
+    constexpr static Parameters param = calculateParameters<HS_FREQ,SYSCLK_FREQ>();
+
+    static_assert(param.state != 1, "Error: no configuration found for the PLL");
+    static_assert(param.state != 2, "Error: NO PERFECT configuration found for the PLL USB at 48 MHz");
+
+    RCC->PLLCFGR = param.param_m | (param.param_n << 6) | (((param.param_p >> 1) -1) << 16) |
+                   (RCC_PLLSRC) | (param.param_q << 24);
 
 
     /* Enable the main PLL */
