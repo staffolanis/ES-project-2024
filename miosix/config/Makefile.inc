@@ -20,7 +20,7 @@
 #OPT_BOARD := stm32f407vg_stm32f4discovery
 #OPT_BOARD := stm32f207ig_stm3220g-eval
 #OPT_BOARD := stm32f207zg_ethboard_v2
-#OPT_BOARD := stm32f207zg_nucleo
+OPT_BOARD := stm32f207zg_nucleo
 #OPT_BOARD := stm32f207ze_als_camboard
 #OPT_BOARD := stm32l151_als_mainboard
 #OPT_BOARD := stm32f407vg_bitsboard
@@ -2048,7 +2048,7 @@ else ifeq ($(ARCH),cortexM3_stm32f2)
         ## Clock frequency
         ## External clock is 8Mhz provided from MCO output of ST-LINK. Actual
         ## HSE crystal (X3) is not fitted.
-        CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ_120MHz=120000000
+        CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ=120000000
 
         ## Select programmer command line
         ## This is the program that is invoked when the user types

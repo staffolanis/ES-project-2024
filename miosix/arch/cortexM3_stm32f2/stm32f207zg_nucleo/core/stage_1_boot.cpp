@@ -98,6 +98,7 @@ void Reset_Handler()
 	 * Note that it is called before switching stacks because the memory
 	 * at _heap_end can be unavailable until the external RAM is initialized.
 	 */
+
     SystemInit();
 
     /*
