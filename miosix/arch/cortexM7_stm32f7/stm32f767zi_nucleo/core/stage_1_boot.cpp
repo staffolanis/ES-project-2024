@@ -39,6 +39,7 @@ void program_startup()
      *    initialize .data and zeros .bss now run with the CPU at full speed
      *    instead of 8MHz
      */
+
     SystemInit();
 
     miosix::IRQconfigureCache();

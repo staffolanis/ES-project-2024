@@ -33,6 +33,7 @@ void program_startup()
     //enables xram, before touching .data and .bss
     //Third, this is a performance improvement since the loops that initialize
     //.data and zeros .bss now run with the CPU at full speed instead of 8MHz
+
     SystemInit();
 
     //These are defined in the linker script

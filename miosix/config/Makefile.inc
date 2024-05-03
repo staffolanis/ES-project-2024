@@ -54,7 +54,7 @@ OPT_BOARD := stm32f407vg_stm32f4discovery
 #OPT_BOARD := atsam4lc2aa_generic
 #OPT_BOARD := stm32f411ce_blackpill
 #OPT_BOARD := stm32l4r9zi_sensortile
-#OPT_BOARD := stm32f767zi_nucleo
+OPT_BOARD := stm32f767zi_nucleo
 #OPT_BOARD := stm32f769ni_discovery
 #OPT_BOARD := stm32f415vg_st25dvdiscovery
 #OPT_BOARD := efm32g222f128_generic
@@ -2048,7 +2048,7 @@ else ifeq ($(ARCH),cortexM3_stm32f2)
         ## Clock frequency
         ## External clock is 8Mhz provided from MCO output of ST-LINK. Actual
         ## HSE crystal (X3) is not fitted.
-        CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ_120MHz=120000000
+        CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ=120000000
 
         ## Select programmer command line
         ## This is the program that is invoked when the user types
@@ -2478,7 +2478,7 @@ else ifeq ($(ARCH),cortexM7_stm32f7)
         CXXFLAGS_BASE += -D_BOARD_STM32F767ZI_NUCLEO
 
         ## Select clock frequency (HSE_VALUE is the xtal on board, fixed)
-        CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ_216MHz=216000000
+        CLOCK_FREQ := -DHSE_VALUE=8000000 -DSYSCLK_FREQ=108000000
 
         ## Select programmer command line
         ## This is the program that is invoked when the user types

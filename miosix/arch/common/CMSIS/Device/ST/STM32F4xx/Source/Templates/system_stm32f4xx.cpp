@@ -117,7 +117,7 @@
 
 /* SYSCLK = PLL_VCO / PLL_P */
 
-//HSE range 4MHz - 26 MHz
+//HSE range 4-26 MHz
 #ifdef HSE_VALUE
     #define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSE
     #define HS_FREQ HSE_VALUE
@@ -140,34 +140,97 @@
 
 #define USB_FREQ 48000000
 
-void setParameters(int InF, int OutFTarget, int *param_m, int *param_n, int *param_q, int *param_p) {
+struct Parameters 
+{
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q;
+    int state;
+};
 
-    //
-    float UsbCheck = (float)USB_FREQ;
-    float InF_ = (float)(InF);
-    float OutFTarget_ = (float)(OutFTarget);
-    float usb_check = UsbCheck;
+template<int FIN, int FOUT> constexpr Parameters calculateParameters() 
+{
+    float p_choices[4][2] = {};
+    float ratio = (float)FOUT/(float)FIN;
+    float ratio_usb = USB_FREQ/(float)FIN;
 
-    for (int n = 50; n < 433; n++) {
-        for (int m = 2; m < 64; m++) {
-            float vco = InF_ * n / m;
-            for (int q = 2; q < 16; q++) {
-                for (int p = 2; p < 10; p += 2) {
-                    float out_f = vco / p;
-                    float out_usb = vco / q;
-                    float diff_usb = (float)USB_FREQ - out_usb;
+    float n_choices[300][3] = {};
+    int full_conf[300][4] = {};
 
-                    if ((out_f == OutFTarget_) && (diff_usb <= usb_check && diff_usb >= 0.0)) {
-                        usb_check = diff_usb;
-                        *param_m = m;
-                        *param_n = n;
-                        *param_q = q;
-                        *param_p = p;
-                        //params->errorFUSB = (int)((diff_usb/(float)USB_FREQ)*10000);
+    /* ---- let's find these parameters ----
+    // p can be 2,4,6,8 
+    // p_choices(p,ratio*p)*/
+    for (int p=0; p<4; p++)
+    {
+        p_choices[p][0] = 2*(p+1);
+        p_choices[p][1] = ratio*2*(p+1);
+    }
+    int n_idx = 0;
+    for (int m=2; m<=63; m++) 
+    {
+            for (int p=0; p<4; p++)
+            {
+                float nn = m*p_choices[p][1];
+                float vco = FIN * (nn/m);
+                if (nn >= 50 && nn <= 432 && nn-(int)nn == 0 && vco >= 100e6 && vco <= 432e6)
+                { 
+                    n_choices[n_idx][0] = nn;
+                    n_choices[n_idx][1] = m;
+                    n_choices[n_idx][2] = p_choices[p][0];
+                    n_idx++;
+                }
+            }
+    }
+    
+    if(n_idx == 0)
+    {
+        return {0,0,0,0,1};
+    }
+    else
+    {
+        int idx_conf = 0;
+        int state = 0;
+        for (int i=0; i<n_idx && idx_conf == 0; i++)
+        {
+            float qq = (n_choices[i][0]/n_choices[i][1])/ratio_usb;        
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0)
+            {
+                full_conf[idx_conf][0] = (int)n_choices[i][0];
+                full_conf[idx_conf][1] = (int)n_choices[i][1];
+                full_conf[idx_conf][2] = (int)n_choices[i][2];
+                full_conf[idx_conf][3] = (int)qq;
+                idx_conf++;
+            }
+        }
+
+        if (idx_conf == 0)
+        {
+            state = 2;
+
+            float min_diff = USB_FREQ;
+            for (int i=0; i<n_idx; i++)
+            {
+                for (int q=2; q<=15; q++)
+                {
+                    float out_usb = ((FIN*n_choices[i][0]) / (n_choices[i][1]*q));
+                    float diff = USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff)
+                    {
+                        min_diff = diff;
+                        full_conf[idx_conf][0] = (int)n_choices[i][0];
+                        full_conf[idx_conf][1] = (int)n_choices[i][1];
+                        full_conf[idx_conf][2] = (int)n_choices[i][2];
+                        full_conf[idx_conf][3] = (int)q;
+                        idx_conf++;
                     }
                 }
             }
         }
+
+        idx_conf --;
+
+        return {full_conf[idx_conf][0], full_conf[idx_conf][1], full_conf[idx_conf][2], full_conf[idx_conf][3], state};
     }
 }
 
@@ -416,17 +479,13 @@ static void SetSysClock(void)
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
     /* Configure the main PLL */
+    constexpr static Parameters param = calculateParameters<HS_FREQ,SYSCLK_FREQ>();
 
-    int param_m, param_n, param_q, param_p;
-    setParameters(HS_FREQ, SYSCLK_FREQ, &param_m, &param_n, &param_q, &param_p);
-
-    #define PLL_M param_m
-    #define PLL_N param_n
-    #define PLL_Q param_q
-    #define PLL_P param_p
-
-    RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
-                   (RCC_PLLSRC) | (PLL_Q << 24);
+    static_assert(param.state != 1, "Error: no configuration found for the PLL");
+    static_assert(param.state != 2, "Error: NO PERFECT configuration found for the PLL USB at 48 MHz");
+    
+    RCC->PLLCFGR = param.param_m | (param.param_n << 6) | (((param.param_p >> 1) -1) << 16) |
+                   (RCC_PLLSRC) | (param.param_q << 24);
 
     /* Enable the main PLL */
     RCC->CR |= RCC_CR_PLLON;

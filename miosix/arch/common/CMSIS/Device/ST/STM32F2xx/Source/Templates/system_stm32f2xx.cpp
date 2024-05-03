@@ -50,13 +50,122 @@
 //By TFT: was in the old stm32f4xx.h
 #define HSE_STARTUP_TIMEOUT    ((uint16_t)0x0500)
 
-#if !defined  (HSE_VALUE) 
-  #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
-#endif /* HSE_VALUE */
+//#if !defined  (HSE_VALUE)
+//  #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
+//#endif /* HSE_VALUE */
 
 #if !defined  (HSI_VALUE)
   #define HSI_VALUE    ((uint32_t)16000000) /*!< Value of the Internal oscillator in Hz*/
 #endif /* HSI_VALUE */
+
+//HSE range 4-26 MHz
+#ifdef HSE_VALUE
+#define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSE
+    #define HS_FREQ HSE_VALUE
+    #if HSE_VALUE < 4000000 || HSE_VALUE > 26000000
+        #error "frequency not supported by external oscillator"
+    #endif
+#else
+#define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSI
+#define HS_FREQ HSI_VALUE
+#endif
+
+#define USB_FREQ 48000000
+
+struct Parameters 
+{
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q;
+    int state;
+};
+
+template<int FIN, int FOUT> constexpr Parameters calculateParameters() 
+{
+    float p_choices[4][2] = {};
+    float ratio = (float)FOUT/(float)FIN;
+    float ratio_usb = USB_FREQ/(float)FIN;
+
+    float n_choices[300][3] = {};
+    int full_conf[300][4] = {};
+
+    /* ---- let's find these parameters ----
+    // p can be 2,4,6,8 
+    // p_choices(p,ratio*p)*/
+    for (int p=0; p<4; p++)
+    {
+        p_choices[p][0] = 2*(p+1);
+        p_choices[p][1] = ratio*2*(p+1);
+    }
+    int n_idx = 0;
+    for (int m=2; m<=63; m++) 
+    {
+            for (int p=0; p<4; p++)
+            {
+                float nn = m*p_choices[p][1];
+                float vco = FIN * (nn/m);
+                if (nn >= 192 && nn <= 432 && nn-(int)nn == 0 && vco >= 192e6 && vco <= 432e6)
+                { 
+                    n_choices[n_idx][0] = nn;
+                    n_choices[n_idx][1] = m;
+                    n_choices[n_idx][2] = p_choices[p][0];
+                    n_idx++;
+                }
+            }
+    }
+    
+    if(n_idx == 0)
+    {
+        return {0,0,0,0,1};
+    }
+    else
+    {
+        int idx_conf = 0;
+        int state = 0;
+        for (int i=0; i<n_idx && idx_conf == 0; i++)
+        {
+            float qq = (n_choices[i][0]/n_choices[i][1])/ratio_usb;        
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0)
+            {
+                full_conf[idx_conf][0] = (int)n_choices[i][0];
+                full_conf[idx_conf][1] = (int)n_choices[i][1];
+                full_conf[idx_conf][2] = (int)n_choices[i][2];
+                full_conf[idx_conf][3] = (int)qq;
+                idx_conf++;
+            }
+        }
+
+        if (idx_conf == 0)
+        {
+            state = 2;
+
+            float min_diff = USB_FREQ;
+            for (int i=0; i<n_idx; i++)
+            {
+                for (int q=2; q<=15; q++)
+                {
+                    float out_usb = ((FIN*n_choices[i][0]) / (n_choices[i][1]*q));
+                    float diff = USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff)
+                    {
+                        min_diff = diff;
+                        full_conf[idx_conf][0] = (int)n_choices[i][0];
+                        full_conf[idx_conf][1] = (int)n_choices[i][1];
+                        full_conf[idx_conf][2] = (int)n_choices[i][2];
+                        full_conf[idx_conf][3] = (int)q;
+                        idx_conf++;
+                    }
+                }
+            }
+        }
+
+        idx_conf --;
+
+        return {full_conf[idx_conf][0], full_conf[idx_conf][1], full_conf[idx_conf][2], full_conf[idx_conf][3], state};
+    }
+}
+
 
 /**
   * @}
@@ -116,20 +225,16 @@
 #endif //_BOARD_SONY_NEWMAN
 //By TFT -- end
 
-//By TFT -- begin
-// this was backported from an older version. Now this code seems to be
-// moved in a function called HAL_something...
-/* PLL_VCO = (HSE_VALUE or HSI_VALUE / PLL_M) * PLL_N */
-#define PLL_M (HSE_VALUE/1000000)
+//SYSCLK_FREQ <= 168000000
+#ifdef SYSCLK_FREQ
+    uint32_t SystemCoreClock = (uint32_t)SYSCLK_FREQ;
+    #if SYSCLK_FREQ > 168000000
+        #error "Max Frequency supported = 168MHz"
+    #endif
+#else
+    #error "Clock not selected"
+#endif
 
-#define PLL_N      240
-
-/* SYSCLK = PLL_VCO / PLL_P */
-#define PLL_P      2
-
-/* USB OTG FS, SDIO and RNG Clock =  PLL_VCO / PLLQ */
-#define PLL_Q      5
-//By TFT -- end
 /******************************************************************************/
 
 /**
@@ -156,7 +261,7 @@
                is no need to call the 2 first functions listed above, since SystemCoreClock
                variable is updated automatically.
   */
-  uint32_t SystemCoreClock = 120000000;
+
   const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
   const uint8_t APBPrescTable[8]  = {0, 0, 0, 0, 1, 2, 3, 4};
 /**
@@ -346,9 +451,14 @@ static void SetSysClock(void)
     /* PCLK1 = HCLK / 4*/
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
-    /* Configure the main PLL */
-    RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
-                   (RCC_PLLCFGR_PLLSRC_HSE) | (PLL_Q << 24);
+    constexpr static Parameters param = calculateParameters<HS_FREQ,SYSCLK_FREQ>();
+
+    static_assert(param.state != 1, "Error: no configuration found for the PLL");
+    static_assert(param.state != 2, "Error: NO PERFECT configuration found for the PLL USB at 48 MHz");
+
+    RCC->PLLCFGR = param.param_m | (param.param_n << 6) | (((param.param_p >> 1) -1) << 16) |
+                   (RCC_PLLSRC) | (param.param_q << 24);
+
 
     /* Enable the main PLL */
     RCC->CR |= RCC_CR_PLLON;

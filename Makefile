@@ -8,6 +8,8 @@ KPATH := miosix
 CONFPATH := $(KPATH)
 include $(CONFPATH)/config/Makefile.inc
 
+VERBOSE := 1
+
 ##
 ## List here subdirectories which contains makefiles
 ##
