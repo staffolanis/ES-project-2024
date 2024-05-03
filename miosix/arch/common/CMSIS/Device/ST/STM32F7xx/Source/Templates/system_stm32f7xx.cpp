@@ -85,12 +85,6 @@
     #define HS_FREQ HSI_VALUE
 #endif
 
-#ifdef HSE_VALUE
-    #define HS_FREQ HSE_VALUE
-#else
-    #define HS_FREQ HSI_VALUE
-#endif
-
 #define USB_FREQ 48000000
 
 struct Parameters 
