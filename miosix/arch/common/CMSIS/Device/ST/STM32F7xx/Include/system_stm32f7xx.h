@@ -84,7 +84,7 @@ extern const uint8_t  APBPrescTable[8];     /*!< APB prescalers table values */
   * @{
   */
   
-extern void SystemInit(int param_n, int param_m, int param_p, int param_q, int param_r);
+extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
 /**
   * @}

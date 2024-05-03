@@ -5,8 +5,8 @@ int main()
     for(;;)
     {
         ledOn();
-        delayMs(1000);
+        delayMs(5000);
         ledOff();
-        delayMs(1000);
+        delayMs(5000);
     }
 }

@@ -85,6 +85,109 @@
     #define HS_FREQ HSI_VALUE
 #endif
 
+#ifdef HSE_VALUE
+    #define HS_FREQ HSE_VALUE
+#else
+    #define HS_FREQ HSI_VALUE
+#endif
+
+#define USB_FREQ 48000000
+
+struct Parameters 
+{
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q;
+    int param_r;
+    int state;
+};
+
+template<int FIN, int FOUT> constexpr Parameters calculateParameters() 
+{
+    float p_choices[4][2] = {};
+    float ratio = (float)FOUT/(float)FIN;
+    float ratio_usb = USB_FREQ/(float)FIN;
+
+    float n_choices[300][3] = {};
+    int full_conf[300][4] = {};
+
+    /* ---- let's find these parameters ----
+    // p can be 2,4,6,8 
+    // p_choices(p,ratio*p)*/
+    for (int p=0; p<4; p++)
+    {
+        p_choices[p][0] = 2*(p+1);
+        p_choices[p][1] = ratio*2*(p+1);
+    }
+    int n_idx = 0;
+    for (int m=2; m<=63; m++) 
+    {
+            for (int p=0; p<4; p++)
+            {
+                float nn = m*p_choices[p][1];
+                float vco = FIN * (nn/m);
+                if (nn >= 50 && nn <= 432 && nn-(int)nn == 0 && vco >= 100e6 && vco <= 432e6)
+                { 
+                    n_choices[n_idx][0] = nn;
+                    n_choices[n_idx][1] = m;
+                    n_choices[n_idx][2] = p_choices[p][0];
+                    n_idx++;
+                }
+            }
+    }
+    
+    if(n_idx == 0)
+    {
+        return {0,0,0,0,0,1};
+    }
+    else
+    {
+        int idx_conf = 0;
+        int state = 0;
+        for (int i=0; i<n_idx && idx_conf == 0; i++)
+        {
+            float qq = (n_choices[i][0]/n_choices[i][1])/ratio_usb;        
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0)
+            {
+                full_conf[idx_conf][0] = (int)n_choices[i][0];
+                full_conf[idx_conf][1] = (int)n_choices[i][1];
+                full_conf[idx_conf][2] = (int)n_choices[i][2];
+                full_conf[idx_conf][3] = (int)qq;
+                idx_conf++;
+            }
+        }
+
+        if (idx_conf == 0)
+        {
+            state = 2;
+
+            float min_diff = USB_FREQ;
+            for (int i=0; i<n_idx; i++)
+            {
+                for (int q=2; q<=15; q++)
+                {
+                    float out_usb = ((FIN*n_choices[i][0]) / (n_choices[i][1]*q));
+                    float diff = USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff)
+                    {
+                        min_diff = diff;
+                        full_conf[idx_conf][0] = (int)n_choices[i][0];
+                        full_conf[idx_conf][1] = (int)n_choices[i][1];
+                        full_conf[idx_conf][2] = (int)n_choices[i][2];
+                        full_conf[idx_conf][3] = (int)q;
+                        idx_conf++;
+                    }
+                }
+            }
+        }
+
+        idx_conf --;
+
+        return {full_conf[idx_conf][0], full_conf[idx_conf][1], full_conf[idx_conf][2], full_conf[idx_conf][3], 2, state};
+    }
+}
+
 /**
   * @}
   */
@@ -159,7 +262,7 @@
   */
 
 //By TFT: added PLL initialization
-static void SetSysClk(int param_n, int param_m, int param_p, int param_q, int param_r);
+static void SetSysClk(void);
 
 /**
   * @}
@@ -176,7 +279,7 @@ static void SetSysClk(int param_n, int param_m, int param_p, int param_q, int pa
   * @param  None
   * @retval None
   */
-void SystemInit(int param_n, int param_m, int param_p, int param_q, int param_r) 
+void SystemInit() 
 {
   /* FPU settings ------------------------------------------------------------*/
   #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
@@ -204,7 +307,7 @@ void SystemInit(int param_n, int param_m, int param_p, int param_q, int param_r)
   RCC->CIR = 0x00000000;
   
   //By TFT -- begin
-  SetSysClk(param_n, param_m, param_p, param_q, param_r);
+  SetSysClk();
   //NOTE: we don't enable caches here because different boards may want to do
   //so or not depending on whether they have external memories for code and data
   //By TFT -- end
@@ -302,7 +405,7 @@ void SystemCoreClockUpdate(void)
 }
 
 //By TFT: added PLL initialization that was not present in the CMSIS code
-void SetSysClk(int param_n, int param_m, int param_p, int param_q, int param_r) 
+void SetSysClk(void) 
 {
   register uint32_t tmpreg = 0, timeout = 0xFFFF;
   
@@ -361,9 +464,13 @@ void SetSysClk(int param_n, int param_m, int param_p, int param_q, int param_r)
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
 
     /* Configure the main PLL */
+    constexpr static Parameters param = calculateParameters<HS_FREQ,SYSCLK_FREQ>();
 
-    RCC->PLLCFGR = param_m | (param_n << 6) | (((param_p >> 1) -1) << 16) |
-      (RCC_PLLSRC) | (param_q << 24) | (param_r << 28);
+    static_assert(param.state != 1, "Error: no configuration found for the PLL");
+    static_assert(param.state != 2, "Error: NO PERFECT configuration found for the PLL USB at 48 MHz");
+
+    RCC->PLLCFGR = param.param_m | (param.param_n << 6) | (((param.param_p >> 1) -1) << 16) |
+      (RCC_PLLSRC) | (param.param_q << 24) | (param.param_r << 28);
     
     /* Enable the main PLL */
     RCC->CR |= RCC_CR_PLLON;
