@@ -65,13 +65,122 @@
 //arch_registers_impl.h
 #include "interfaces/arch_registers.h"
 
-#if !defined  (HSE_VALUE) 
-  #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
-#endif /* HSE_VALUE */
+//#if !defined  (HSE_VALUE)
+//  #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
+//#endif /* HSE_VALUE */
 
 #if !defined  (HSI_VALUE)
   #define HSI_VALUE    ((uint32_t)16000000) /*!< Value of the Internal oscillator in Hz*/
 #endif /* HSI_VALUE */
+
+//HSE range 4-26 MHz
+#ifdef HSE_VALUE
+    #define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSE
+    #define HS_FREQ HSE_VALUE
+    #if HSE_VALUE < 4000000 || HSE_VALUE > 26000000
+        #error "frequency not supported by external oscillator"
+    #endif
+#else
+    #define RCC_PLLSRC RCC_PLLCFGR_PLLSRC_HSI
+    #define HS_FREQ HSI_VALUE
+#endif
+
+#define USB_FREQ 48000000
+
+struct Parameters 
+{
+    int param_n;
+    int param_m;
+    int param_p;
+    int param_q;
+    int param_r;
+    int state;
+};
+
+template<int FIN, int FOUT> constexpr Parameters calculateParameters() 
+{
+    float p_choices[4][2] = {};
+    float ratio = (float)FOUT/(float)FIN;
+    float ratio_usb = USB_FREQ/(float)FIN;
+
+    float n_choices[300][3] = {};
+    int full_conf[300][4] = {};
+
+    /* ---- let's find these parameters ----
+    // p can be 2,4,6,8 
+    // p_choices(p,ratio*p)*/
+    for (int p=0; p<4; p++)
+    {
+        p_choices[p][0] = 2*(p+1);
+        p_choices[p][1] = ratio*2*(p+1);
+    }
+    int n_idx = 0;
+    for (int m=2; m<=63; m++) 
+    {
+            for (int p=0; p<4; p++)
+            {
+                float nn = m*p_choices[p][1];
+                float vco = FIN * (nn/m);
+                if (nn >= 50 && nn <= 432 && nn-(int)nn == 0 && vco >= 100e6 && vco <= 432e6)
+                { 
+                    n_choices[n_idx][0] = nn;
+                    n_choices[n_idx][1] = m;
+                    n_choices[n_idx][2] = p_choices[p][0];
+                    n_idx++;
+                }
+            }
+    }
+    
+    if(n_idx == 0)
+    {
+        return {0,0,0,0,0,1};
+    }
+    else
+    {
+        int idx_conf = 0;
+        int state = 0;
+        for (int i=0; i<n_idx && idx_conf == 0; i++)
+        {
+            float qq = (n_choices[i][0]/n_choices[i][1])/ratio_usb;        
+            if (qq>=2 && qq<=15 && qq-(int)qq == 0)
+            {
+                full_conf[idx_conf][0] = (int)n_choices[i][0];
+                full_conf[idx_conf][1] = (int)n_choices[i][1];
+                full_conf[idx_conf][2] = (int)n_choices[i][2];
+                full_conf[idx_conf][3] = (int)qq;
+                idx_conf++;
+            }
+        }
+
+        if (idx_conf == 0)
+        {
+            state = 2;
+
+            float min_diff = USB_FREQ;
+            for (int i=0; i<n_idx; i++)
+            {
+                for (int q=2; q<=15; q++)
+                {
+                    float out_usb = ((FIN*n_choices[i][0]) / (n_choices[i][1]*q));
+                    float diff = USB_FREQ - out_usb;
+                    if (diff >= 0 && diff<=min_diff)
+                    {
+                        min_diff = diff;
+                        full_conf[idx_conf][0] = (int)n_choices[i][0];
+                        full_conf[idx_conf][1] = (int)n_choices[i][1];
+                        full_conf[idx_conf][2] = (int)n_choices[i][2];
+                        full_conf[idx_conf][3] = (int)q;
+                        idx_conf++;
+                    }
+                }
+            }
+        }
+
+        idx_conf --;
+
+        return {full_conf[idx_conf][0], full_conf[idx_conf][1], full_conf[idx_conf][2], full_conf[idx_conf][3], 2, state};
+    }
+}
 
 /**
   * @}
@@ -98,35 +207,16 @@
                                    This value must be a multiple of 0x200. */
 /******************************************************************************/
 
-// By Alberto Nidasio and TFT -- begin
-#if (HSE_VALUE % 2000000) == 0
 
-//PLL input frequency set to 2MHz to reduce jitter as suggested by the datasheet.
-const unsigned int PLL_M=HSE_VALUE/2000000;
-#ifdef SYSCLK_FREQ_216MHz
-const unsigned int PLL_Q=9;
-const unsigned int PLL_R=7;
-const unsigned int PLL_N=216;
-const unsigned int PLL_P=2;
+//SYSCLK_FREQ <= 216000000
+#ifdef SYSCLK_FREQ
+    uint32_t SystemCoreClock = (uint32_t)SYSCLK_FREQ;
+    #if SYSCLK_FREQ > 216000000
+        #error "Max Frequency supported = 216MHz"
+    #endif
 #else
-#error Clock not selected
+    #error "Clock not selected"
 #endif
-
-#else // HSE_VALUE not divisible by 2MHz
-
-//PLL Input frequency set to 1MHz
-const unsigned int PLL_M=HSE_VALUE/1000000;
-#ifdef SYSCLK_FREQ_216MHz
-const unsigned int PLL_Q=9;
-const unsigned int PLL_R=7;
-const unsigned int PLL_N=432;
-const unsigned int PLL_P=2;
-#else
-#error Clock not selected
-#endif
-
-#endif // HSE_VALUE divisibility check
-// By Alberto Nidasio and TFT -- end
 
 /**
   * @}
@@ -152,12 +242,7 @@ const unsigned int PLL_P=2;
                is no need to call the 2 first functions listed above, since SystemCoreClock
                variable is updated automatically.
   */
-//By TFT: we increase the clock BEFORE initializing .data and .bss!
-#ifdef SYSCLK_FREQ_216MHz
-uint32_t SystemCoreClock = 216000000;
-#else
-#error No clock defined
-#endif
+
   //uint32_t SystemCoreClock = 16000000;
   const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
   const uint8_t APBPrescTable[8] = {0, 0, 0, 0, 1, 2, 3, 4};
@@ -188,7 +273,7 @@ static void SetSysClk(void);
   * @param  None
   * @retval None
   */
-void SystemInit(void)
+void SystemInit() 
 {
   /* FPU settings ------------------------------------------------------------*/
   #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
@@ -314,7 +399,7 @@ void SystemCoreClockUpdate(void)
 }
 
 //By TFT: added PLL initialization that was not present in the CMSIS code
-void SetSysClk(void)
+void SetSysClk(void) 
 {
   register uint32_t tmpreg = 0, timeout = 0xFFFF;
   
@@ -371,10 +456,15 @@ void SetSysClk(void)
     
     /* PCLK1 = HCLK / 4*/
     RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
-    
+
     /* Configure the main PLL */
-    RCC->PLLCFGR = PLL_M | (PLL_N << 6) | (((PLL_P >> 1) -1) << 16) |
-      (RCC_PLLCFGR_PLLSRC_HSE) | (PLL_Q << 24) | (PLL_R << 28);
+    constexpr static Parameters param = calculateParameters<HS_FREQ,SYSCLK_FREQ>();
+
+    static_assert(param.state != 1, "Error: no configuration found for the PLL");
+    static_assert(param.state != 2, "Error: NO PERFECT configuration found for the PLL USB at 48 MHz");
+
+    RCC->PLLCFGR = param.param_m | (param.param_n << 6) | (((param.param_p >> 1) -1) << 16) |
+      (RCC_PLLSRC) | (param.param_q << 24) | (param.param_r << 28);
     
     /* Enable the main PLL */
     RCC->CR |= RCC_CR_PLLON;

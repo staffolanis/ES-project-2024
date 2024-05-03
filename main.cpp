@@ -1,7 +1,4 @@
 #include <miosix.h>
-#include <cstdio>
-
-using namespace std;
 using namespace miosix;
 
 typedef Gpio<GPIOD_BASE, 12> greenLED; // Define GPIO pin for green LED
